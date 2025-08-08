@@ -3,3 +3,4 @@ uvicorn
 PyPDF2
 google-generativeai
 pydantic
+python-multipart
