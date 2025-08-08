@@ -1,4 +1,3 @@
-```markdown
 # 📑 Insurance Claim Analyzer – HackRx 6.0
 
 An AI-powered backend service to **analyze and validate insurance claims** using uploaded policy documents (PDF) and natural language claim descriptions.
@@ -150,5 +149,3 @@ curl -X POST "https://your-service-name.onrender.com/api/v1/hackrx/run" \
 * Render Hosting Platform
 
 ---
-
-```
