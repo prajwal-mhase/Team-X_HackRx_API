@@ -1,90 +1,115 @@
 # api_app.py
-import os
-import requests
+
 import PyPDF2
+import json
+import re
 from io import BytesIO
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from pydantic import BaseModel
 import google.generativeai as genai
-
-
+import os
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY not set in environment variables.")
 
+
+
+# ✅ Configure Gemini API key
 genai.configure(api_key=GEMINI_API_KEY)
 
-API_KEY = "54a8273bcceff8860cca909e4772b16cebfdda5f80d3a6ef557478979c84eb0d"
+# ------------------------
+# Utility Functions
+# ------------------------
 
-app = FastAPI(
-    title="HackRx Claim Analyzer",
-    description="Answers insurance policy questions from a PDF document.",
-    version="1.0.0"
-)
-
-
-class HackRxRequest(BaseModel):
-    documents: str  
-    questions: list[str]  
-
-class HackRxResponse(BaseModel):
-    answers: list[str]
-
-async def verify_auth(request: Request):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Unauthorized: Missing Bearer token")
-    token = auth_header.split(" ")[1]
-    if token != API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key")
-
-def extract_pdf_text_from_url(pdf_url: str) -> str:
-    """Download PDF from URL and extract text."""
+def extract_pdf_text(uploaded_file):
+    """Extract text from PDF bytes."""
     try:
-        response = requests.get(pdf_url, timeout=20)
-        response.raise_for_status()
-        pdf_reader = PyPDF2.PdfReader(BytesIO(response.content))
+        pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file))
         text = ""
         for page in pdf_reader.pages:
             page_text = page.extract_text()
             if page_text:
                 text += page_text + "\n"
-        if not text.strip():
-            raise ValueError("No readable text found in PDF.")
         return text.strip()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading PDF: {str(e)}")
 
-def ask_llm(question: str, document_text: str) -> str:
-    """Ask Gemini model a question about the document."""
+def extract_json_from_text(text):
+    """Extract the first JSON object from text."""
+    try:
+        match = re.search(r"\{[\s\S]*?\}", text)
+        if match:
+            return json.loads(match.group(0))
+        else:
+            raise ValueError("No JSON object found.")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {e}")
+
+def ask_llm(query, document_text):
+    """Send prompt to Gemini model and get structured JSON."""
     prompt = f"""
-You are an AI insurance analyst. 
-Based on the policy document below, answer the user's question concisely.
+You are an AI insurance analyst.
+
+User Query:
+{query}
 
 Policy Document:
 {document_text}
 
-Question:
-{question}
+Your task:
+1. Determine if the claim should be approved or rejected.
+2. Specify the claim amount (if applicable).
+3. Justify the decision.
 
-Answer in plain text, no formatting.
+Return ONLY a JSON response in the following format (no markdown, no explanation):
+
+{{
+  "decision": "approved or rejected",
+  "amount": "amount in INR or null",
+  "justification": "your reasoning"
+}}
 """
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    response = model.generate_content(prompt, generation_config={"temperature": 0.0})
+    return response.text.strip()
+
+# ------------------------
+# FastAPI Setup
+# ------------------------
+
+app = FastAPI(
+    title="Insurance Claim Analyzer API",
+    description="API endpoint for insurance claim analysis",
+    version="1.0.0"
+)
+
+# Response Model
+class ClaimAnalysisResponse(BaseModel):
+    decision: str
+    amount: str | None
+    justification: str
+
+@app.post("/api/v1/hackrx/run", response_model=ClaimAnalysisResponse)
+async def analyze_claim(
+    pdf_file: UploadFile = File(..., description="Insurance policy PDF file"),
+    claim_description: str = Form(..., description="Natural language claim description")
+):
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(prompt, generation_config={"temperature": 0.0})
-        return response.text.strip()
+        # Read PDF
+        pdf_bytes = await pdf_file.read()
+        doc_text = extract_pdf_text(pdf_bytes)
+
+        if not doc_text:
+            raise HTTPException(status_code=400, detail="No readable text found in PDF.")
+
+        # Ask LLM
+        raw = ask_llm(claim_description, doc_text)
+        result = extract_json_from_text(raw)
+
+        return ClaimAnalysisResponse(
+            decision=result.get("decision", ""),
+            amount=result.get("amount", None),
+            justification=result.get("justification", "")
+        )
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Endpoint
-@app.post("/hackrx/run", response_model=HackRxResponse)
-async def hackrx_run(payload: HackRxRequest, auth=Depends(verify_auth)):
-
-    document_text = extract_pdf_text_from_url(payload.documents)
-
-    answers = []
-    for q in payload.questions:
-        answer = ask_llm(q, document_text)
-        answers.append(answer)
-
-    return HackRxResponse(answers=answers)
