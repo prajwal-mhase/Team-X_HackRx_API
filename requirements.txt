@@ -1,7 +1,14 @@
 fastapi
-uvicorn
+uvicorn[standard]
 PyPDF2
 google-generativeai
-pydantic
 python-multipart
+requests
+pydantic
+python-docx
+email-validator
+pdf2image
+pytesseract
 faiss-cpu
+sentence-transformers
+numpy
