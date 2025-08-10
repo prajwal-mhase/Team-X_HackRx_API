@@ -51,7 +51,10 @@ if not GEMINI_API_KEY:
     raise RuntimeError("❌ GEMINI_API_KEY not set.")
 genai.configure(api_key=GEMINI_API_KEY)
 
-TEAM_AUTH_TOKEN = os.getenv("TEAM_AUTH_TOKEN", "54a8273bcceff8860cca909e4772b16cebfdda5f80d3a6ef557478979c84eb0d")
+TEAM_AUTH_TOKEN = os.getenv(
+    "TEAM_AUTH_TOKEN",
+    "54a8273bcceff8860cca909e4772b16cebfdda5f80d3a6ef557478979c84eb0d",
+)
 
 logger = logging.getLogger("uvicorn.error")
 
