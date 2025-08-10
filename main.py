@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import mimetypes
 import hashlib
 import logging
+import time
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -51,10 +52,7 @@ if not GEMINI_API_KEY:
     raise RuntimeError("❌ GEMINI_API_KEY not set.")
 genai.configure(api_key=GEMINI_API_KEY)
 
-TEAM_AUTH_TOKEN = os.getenv(
-    "TEAM_AUTH_TOKEN",
-    "54a8273bcceff8860cca909e4772b16cebfdda5f80d3a6ef557478979c84eb0d",
-)
+TEAM_AUTH_TOKEN = os.getenv("TEAM_AUTH_TOKEN", "54a8273bcceff8860cca909e4772b16cebfdda5f80d3a6ef557478979c84eb0d")
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -67,6 +65,23 @@ def verify_auth_token(auth_header: Optional[str]):
     token = auth_header.split("Bearer ")[1].strip()
     if token != TEAM_AUTH_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid authentication token.")
+
+# ------------------------
+# Document download with retry
+# ------------------------
+def download_with_retry(url, retries=3, backoff=5):
+    for attempt in range(retries):
+        try:
+            resp = requests.get(url, timeout=60)
+            resp.raise_for_status()
+            return resp.content, resp.headers.get("Content-Type")
+        except Exception as e:
+            logger.error(f"Download attempt {attempt+1} failed: {e}")
+            if attempt < retries - 1:
+                sleep_time = backoff * (2 ** attempt)  # exponential backoff
+                time.sleep(sleep_time)
+            else:
+                raise
 
 # ------------------------
 # File Parsing
@@ -363,18 +378,15 @@ async def run_analysis(payload: QuestionRequest, authorization: Optional[str] = 
     verify_auth_token(authorization)
 
     try:
-        resp = requests.get(payload.documents, timeout=15)
-        resp.raise_for_status()
+        file_bytes, content_type = download_with_retry(payload.documents)
     except Exception as e:
         logger.error(f"Failed to download document: {e}")
         raise HTTPException(status_code=400, detail="Could not download document.")
 
-    file_bytes = resp.content
-
     if len(file_bytes) > 15 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 15MB).")
 
-    doc_text = extract_text_from_file(file_bytes, payload.documents, resp.headers.get("Content-Type"))
+    doc_text = extract_text_from_file(file_bytes, payload.documents, content_type)
     if not doc_text:
         raise HTTPException(status_code=400, detail="No readable text found in document.")
 
