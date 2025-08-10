@@ -4,11 +4,9 @@ PyPDF2
 google-generativeai
 python-multipart
 requests
-pydantic
 python-docx
-email-validator
-pdf2image
 pytesseract
-faiss-cpu
+pdf2image
 sentence-transformers
+faiss-cpu
 numpy

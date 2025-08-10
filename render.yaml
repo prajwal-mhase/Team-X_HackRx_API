@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: my-fastapi-app
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        fromSecret: GEMINI_API_KEY
+      - key: TEAM_AUTH_TOKEN
+        value: "54a8273bcceff8860cca909e4772b16cebfdda5f80d3a6ef557478979c84eb0d"
