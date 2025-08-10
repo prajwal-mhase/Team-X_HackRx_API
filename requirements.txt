@@ -4,3 +4,4 @@ PyPDF2
 google-generativeai
 pydantic
 python-multipart
+faiss-cpu
