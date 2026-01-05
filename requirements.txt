@@ -5,8 +5,5 @@ google-generativeai
 python-multipart
 requests
 python-docx
-pytesseract
 pdf2image
-sentence-transformers
-faiss-cpu
-numpy
+pytesseract
