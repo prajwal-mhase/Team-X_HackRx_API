@@ -149,8 +149,8 @@ curl -X POST "https://your-service-name.onrender.com/hackrx/run" \
 
 * Prajwal Mhase
 * Ram Darekar
-* Gauri Lanke
-* Payal Lanke
+* Siddharth Labhade
+* Krishna Ranode
 
 ---
 
